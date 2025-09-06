@@ -1,0 +1,103 @@
+/*
+    Fenwick Tree (Binary Indexed Tree) - 2D implementation (templated)
+    ------------------------------------------------------------------
+    Supports:
+        - Point updates
+        - Range sum queries on submatrices
+        - Point assignment (set value)
+        - Works with 1-indexed coordinates
+
+    Template parameter: T
+        - Can be int, long long, double, etc.
+
+    Time Complexity:
+        - update / setValue : O(log n · log m)
+        - prefixSum / rangeSum : O(log n · log m)
+
+    Notes:
+        - Construction from matrix is O(n·m·log²n).
+        - Debugging helpers included.
+*/
+
+#include <bits/stdc++.h>
+using namespace std;
+
+template <typename T>
+class FenwickTree2D {
+private:
+    vector<vector<T>> bit; // 2D Fenwick tree
+    int n, m;
+
+public:
+    // Constructor: empty tree
+    FenwickTree2D(int n, int m) : n(n), m(m) {
+        bit.assign(n + 1, vector<T>(m + 1, T(0)));
+    }
+
+    // Constructor: build from matrix
+    FenwickTree2D(const vector<vector<T>>& matrix) {
+        n = matrix.size();
+        m = matrix[0].size();
+        bit.assign(n + 1, vector<T>(m + 1, T(0)));
+
+        // Build by inserting each value (O(n·m·log²n))
+        for (int i = 1; i <= n; i++) {
+            for (int j = 1; j <= m; j++) {
+                update(i, j, matrix[i - 1][j - 1]);
+            }
+        }
+    }
+
+    // Add delta to element (x, y)
+    void update(int x, int y, T delta) {
+        for (int i = x; i <= n; i += i & -i) {
+            for (int j = y; j <= m; j += j & -j) {
+                bit[i][j] += delta;
+            }
+        }
+    }
+
+    // Prefix sum from (1,1) to (x,y)
+    T prefixSum(int x, int y) const {
+        T sum = T(0);
+        for (int i = x; i > 0; i -= i & -i) {
+            for (int j = y; j > 0; j -= j & -j) {
+                sum += bit[i][j];
+            }
+        }
+        return sum;
+    }
+
+    // Range sum query for rectangle [(x1,y1), (x2,y2)]
+    T rangeSum(int x1, int y1, int x2, int y2) const {
+        return prefixSum(x2, y2)
+             - prefixSum(x1 - 1, y2)
+             - prefixSum(x2, y1 - 1)
+             + prefixSum(x1 - 1, y1 - 1);
+    }
+
+    // Set element (x, y) to a new value
+    void setValue(int x, int y, T newValue) {
+        T currentValue = rangeSum(x, y, x, y);
+        update(x, y, newValue - currentValue);
+    }
+
+    // Debugging helpers
+    void printPrefixSums() const {
+        for (int i = 1; i <= n; i++) {
+            for (int j = 1; j <= m; j++) {
+                cout << prefixSum(i, j) << " ";
+            }
+            cout << "\n";
+        }
+    }
+
+    void printBIT() const {
+        for (int i = 1; i <= n; i++) {
+            for (int j = 1; j <= m; j++) {
+                cout << bit[i][j] << " ";
+            }
+            cout << "\n";
+        }
+    }
+};
