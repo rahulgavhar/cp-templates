@@ -25,7 +25,7 @@
 using namespace std;
 
 template <typename T>
-class FenwickTree {
+class BIT_1D {
 private:
     vector<T> bit;   // Fenwick tree internal array
     vector<T> arr;   // Original array values
@@ -33,7 +33,7 @@ private:
 
 public:
     // Constructor: empty tree
-    FenwickTree(int size, bool oneIndexed = true) {
+    BIT_1D(int size, bool oneIndexed = true) {
         offset = oneIndexed ? 0 : 1;
         n = size + offset;
         bit.assign(n, T(0));
@@ -41,7 +41,7 @@ public:
     }
 
     // Constructor: build from array
-    FenwickTree(const vector<T>& a, bool oneIndexed = true) {
+    BIT_1D(const vector<T>& a, bool oneIndexed = true) {
         int len = a.size();
         offset = oneIndexed ? 0 : 1;
         n = len + offset;

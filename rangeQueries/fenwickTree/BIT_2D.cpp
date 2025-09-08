@@ -23,19 +23,19 @@
 using namespace std;
 
 template <typename T>
-class FenwickTree2D {
+class BIT_2D {
 private:
     vector<vector<T>> bit; // 2D Fenwick tree
     int n, m;
 
 public:
     // Constructor: empty tree
-    FenwickTree2D(int n, int m) : n(n), m(m) {
+    BIT_2D(int n, int m) : n(n), m(m) {
         bit.assign(n + 1, vector<T>(m + 1, T(0)));
     }
 
     // Constructor: build from matrix
-    FenwickTree2D(const vector<vector<T>>& matrix) {
+    BIT_2D(const vector<vector<T>>& matrix) {
         n = matrix.size();
         m = matrix[0].size();
         bit.assign(n + 1, vector<T>(m + 1, T(0)));

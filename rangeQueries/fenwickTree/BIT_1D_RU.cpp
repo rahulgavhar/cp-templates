@@ -21,7 +21,7 @@
 using namespace std;
 
 template <typename T>
-class FenwickTreeRange {
+class BIT_1D_RU {
 private:
     vector<T> BIT1; // First Fenwick tree
     vector<T> BIT2; // Second Fenwick tree
@@ -29,7 +29,7 @@ private:
 
 public:
     // Build from array
-    FenwickTreeRange(const vector<T>& a, bool oneIndexed) {
+    BIT_1D_RU(const vector<T>& a, bool oneIndexed) {
         int len = a.size();
         offset = (oneIndexed ? 0 : 1);
         sz = len + offset;
@@ -41,7 +41,7 @@ public:
     }
 
     // Empty tree
-    FenwickTreeRange(int len) : offset(1), sz(len + offset) {
+    BIT_1D_RU(int len) : offset(1), sz(len + offset) {
         BIT1.assign(sz, T(0));
         BIT2.assign(sz, T(0));
     }

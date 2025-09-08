@@ -1,239 +1,253 @@
 /*
-   SegTreeAdv2D Class
-
-   This is a 2D Segment Tree for advanced numeric queries with lazy propagation.
-   Supports the following efficiently (all in O(log n * log m)):
-
-   Supported Queries:
-      - rangeGCD(x1,y1,x2,y2)       -> GCD of values in the rectangle
-      - rangeLCM(x1,y1,x2,y2)       -> LCM of values in the rectangle
-      - rangeProdMod(x1,y1,x2,y2,M) -> Product modulo M of values in the rectangle
-      - pointQuery(x,y)             -> value at (x,y)
-
-   Supported Updates:
-      - rangeAssign(x1,y1,x2,y2,val) -> set all values in rectangle to val
-      - pointAssign(x,y,val)         -> set value at (x,y) = val
-
-   Internally each node stores:
-      - val     : representative value (for assign operations)
-      - gcdVal  : GCD of its segment
-      - lcmVal  : LCM of its segment
-      - prodVal : product of its segment (full product, mod applied only in queries)
-      - assignVal, hasAssign for lazy propagation
-*/
+  SegTreeAdv2D_Dynamic<T>
+  -----------------------
+  A dynamic 2D quadtree supporting **lazy range-assign** operations.
+ 
+  Supported queries:
+    - rangeAssign(x1,y1,x2,y2, val)  // set submatrix to constant
+    - pointAssign(x,y,val)           // assign a single cell
+    - rangeGCD(x1,y1,x2,y2)          // gcd of submatrix
+    - rangeLCM(x1,y1,x2,y2)          // lcm (saturating at LCM_CAP)
+    - rangeProdMod(x1,y1,x2,y2)      // product mod fixed MOD
+    - pointQuery(x,y)                // single cell value
+ 
+  Complexity:
+    - Updates/Queries: O(log N * log M)
+    - Memory: O(#touched nodes) via dynamic allocation
+ */
 
 #include <bits/stdc++.h>
 using namespace std;
 using ll = long long;
 
+template<typename T>
 class SegTreeAdv2D {
     struct Node {
-        ll val;        // representative value for assign
-        ll gcdVal;
-        ll lcmVal;
-        ll prodVal;
-        bool hasAssign;
-        ll assignVal;
-        Node(): val(0), gcdVal(0), lcmVal(1), prodVal(1), hasAssign(false), assignVal(0) {}
+        T gcdVal = 0;
+        T lcmVal = 1;
+        T prodMod = 1;
+
+        bool hasAssign = false;
+        T assignVal = 0;
+
+        int child[4] = {-1,-1,-1,-1};
     };
 
-    int n, m;
-    vector<vector<Node>> tree;
+    int n = 0, m = 0;
+    T MOD = (T)1000000007;
+    T LCM_CAP = (T(1) << 62);
+    vector<Node> nodes;
 
-    // ---------------- Build ----------------
-    void buildY(int idxX, int idxY, int ly, int ry, const vector<ll>& row) {
-        Node &node = tree[idxX][idxY];
-        if(ly == ry) {
-            ll v = row.empty() ? 0 : row[ly];
-            node.val = v;
-            node.gcdVal = v;
-            node.lcmVal = v;
-            node.prodVal = v;
+    inline int newNode() {
+        nodes.push_back(Node());
+        return (int)nodes.size() - 1;
+    }
+
+    inline long long area(int x1,int x2,int y1,int y2) const {
+        return 1LL * (x2 - x1 + 1) * (y2 - y1 + 1);
+    }
+
+    static inline T gcdT(T a,T b){ return std::gcd(a,b); }
+
+    inline T lcm_saturate(T a,T b) const {
+        if (a==0 || b==0) return 0;
+        __int128 g = std::gcd(a,b);
+        __int128 t = (__int128)a / g * b;
+        if (t > LCM_CAP) return LCM_CAP;
+        return (T)t;
+    }
+
+    inline T mod_pow(T a,long long e) const {
+        T r = 1 % MOD;
+        a = (a % MOD + MOD) % MOD;
+        while (e>0) {
+            if (e&1) r = (__int128)r * a % MOD;
+            a = (__int128)a * a % MOD;
+            e >>= 1;
+        }
+        return r;
+    }
+
+    void applyAssign(int v,int x1,int x2,int y1,int y2,T val){
+        Node &nd = nodes[v];
+        long long ar = area(x1,x2,y1,y2);
+        nd.gcdVal = val;
+        nd.lcmVal = std::min(LCM_CAP, (T)std::llabs((long long)val));
+        nd.prodMod = mod_pow(val, ar);
+        nd.hasAssign = true;
+        nd.assignVal = val;
+    }
+
+    void pull(int v){
+        Node &nd = nodes[v];
+        bool any=false;
+        T g=0,L=1,P=1;
+        for(int i=0;i<4;i++){
+            int c = nd.child[i];
+            if (c==-1) continue;
+            any=true;
+            Node &C = nodes[c];
+            g = gcdT(g,C.gcdVal);
+            L = lcm_saturate(L,C.lcmVal);
+            P = (__int128)P * C.prodMod % MOD;
+        }
+        if (any){ nd.gcdVal=g; nd.lcmVal=L; nd.prodMod=P; }
+    }
+
+    void push(int v,int x1,int x2,int y1,int y2){
+        Node &nd = nodes[v];
+        if (!nd.hasAssign) return;
+        if (x1==x2 && y1==y2){ nd.hasAssign=false; return; }
+        int mx=(x1+x2)>>1,my=(y1+y2)>>1;
+        auto ensure=[&](int i,int cx1,int cx2,int cy1,int cy2){
+            if (cx1>cx2||cy1>cy2) return;
+            if (nd.child[i]==-1) nd.child[i]=newNode();
+            applyAssign(nd.child[i],cx1,cx2,cy1,cy2,nd.assignVal);
+        };
+        ensure(0,x1,mx,y1,my);
+        ensure(1,x1,mx,my+1,y2);
+        ensure(2,mx+1,x2,y1,my);
+        ensure(3,mx+1,x2,my+1,y2);
+        nd.hasAssign=false;
+    }
+
+    // ---------- BUILD ----------
+    void build_rec(int v,int x1,int x2,int y1,int y2,const vector<vector<T>> &a){
+        if (x1>x2 || y1>y2) return;
+        if (x1==x2 && y1==y2){
+            applyAssign(v,x1,x2,y1,y2,a[x1][y1]);
             return;
         }
-        int mid = (ly + ry) / 2;
-        buildY(idxX, idxY*2, ly, mid, row);
-        buildY(idxX, idxY*2+1, mid+1, ry, row);
-        pullY(idxX, idxY);
+        int mx=(x1+x2)>>1,my=(y1+y2)>>1;
+        int c0=nodes[v].child[0]=newNode();
+        int c1=nodes[v].child[1]=newNode();
+        int c2=nodes[v].child[2]=newNode();
+        int c3=nodes[v].child[3]=newNode();
+        build_rec(c0,x1,mx,y1,my,a);
+        build_rec(c1,x1,mx,my+1,y2,a);
+        build_rec(c2,mx+1,x2,y1,my,a);
+        build_rec(c3,mx+1,x2,my+1,y2,a);
+        pull(v);
     }
 
-    void buildX(int idxX, int lx, int rx, const vector<vector<ll>>& grid) {
-        if(lx == rx) {
-            buildY(idxX, 1, 0, m-1, grid.empty() ? vector<ll>(m,0) : grid[lx]);
-        } else {
-            int mid = (lx + rx) / 2;
-            buildX(idxX*2, lx, mid, grid);
-            buildX(idxX*2+1, mid+1, rx, grid);
-            buildY(idxX, 1, 0, m-1, {});
-        }
-    }
-
-    // ---------------- Lazy Helpers ----------------
-    void applyAssign(int idxX,int idxY,ll val,ll lenY) {
-        Node &node = tree[idxX][idxY];
-        node.val = val;
-        node.gcdVal = val;
-        node.lcmVal = val;
-        node.prodVal = 1;
-        for(int i=0;i<lenY;i++) node.prodVal *= val; // can overflow if too big
-        node.assignVal = val;
-        node.hasAssign = true;
-    }
-
-    void pushY(int idxX,int idxY,int ly,int ry){
-        Node &node = tree[idxX][idxY];
-        if(node.hasAssign && ly != ry){
-            int mid = (ly + ry) / 2;
-            applyAssign(idxX,idxY*2,node.assignVal, mid-ly+1);
-            applyAssign(idxX,idxY*2+1,node.assignVal, ry-mid);
-            node.hasAssign = false;
-        }
-    }
-
-    void pullY(int idxX,int idxY){
-        Node &node = tree[idxX][idxY];
-        Node &L = tree[idxX][idxY*2], &R = tree[idxX][idxY*2+1];
-        node.gcdVal = __gcd(L.gcdVal,R.gcdVal);
-        ll lcmGcd = __gcd(L.lcmVal,R.lcmVal);
-        node.lcmVal = (lcmGcd == 0 ? max(L.lcmVal,R.lcmVal) : (L.lcmVal / lcmGcd) * R.lcmVal);
-        node.prodVal = L.prodVal * R.prodVal;
-    }
-
-    void pullX(int idxX,int idxY){
-        Node &node = tree[idxX][idxY];
-        Node &L = tree[idxX*2][idxY];
-        Node &R = tree[idxX*2+1][idxY];
-        node.gcdVal = __gcd(L.gcdVal,R.gcdVal);
-        ll lcmGcd = __gcd(L.lcmVal,R.lcmVal);
-        node.lcmVal = (lcmGcd == 0 ? max(L.lcmVal,R.lcmVal) : (L.lcmVal / lcmGcd) * R.lcmVal);
-        node.prodVal = L.prodVal * R.prodVal;
-    }
-
-    // ---------------- Updates ----------------
-    void rangeAssignY(int idxX,int idxY,int ly,int ry,int y1,int y2,ll val){
-        if(y2<ly || ry<y1) return;
-        if(y1<=ly && ry<=y2){ applyAssign(idxX,idxY,val,ry-ly+1); return; }
-        pushY(idxX,idxY,ly,ry);
-        int mid = (ly + ry) / 2;
-        rangeAssignY(idxX,idxY*2,ly,mid,y1,y2,val);
-        rangeAssignY(idxX,idxY*2+1,mid+1,ry,y1,y2,val);
-        pullY(idxX,idxY);
-    }
-
-    void rangeAssignX(int idxX,int lx,int rx,int x1,int x2,int y1,int y2,ll val){
-        if(x2<lx || rx<x1) return;
-        if(x1<=lx && rx<=x2){ rangeAssignY(idxX,1,0,m-1,y1,y2,val); return; }
-        int mid = (lx + rx) / 2;
-        rangeAssignX(idxX*2,lx,mid,x1,x2,y1,y2,val);
-        rangeAssignX(idxX*2+1,mid+1,rx,x1,x2,y1,y2,val);
-        mergeY(idxX,1,0,m-1);
-    }
-
-    void mergeY(int idxX,int idxY,int ly,int ry){
-        if(ly == ry){
-            pullX(idxX,idxY);
+    // ---------- UPDATE ----------
+    void rangeAssign_rec(int v,int x1,int x2,int y1,int y2,int ux1,int uy1,int ux2,int uy2,T val){
+        if (ux1>x2||ux2<x1||uy1>y2||uy2<y1) return;
+        if (ux1<=x1&&x2<=ux2&&uy1<=y1&&y2<=uy2){
+            applyAssign(v,x1,x2,y1,y2,val);
             return;
         }
-        int mid = (ly + ry) / 2;
-        mergeY(idxX,idxY*2,ly,mid);
-        mergeY(idxX,idxY*2+1,mid+1,ry);
-        pullY(idxX,idxY);
+        push(v,x1,x2,y1,y2);
+        int mx=(x1+x2)>>1,my=(y1+y2)>>1;
+        if (x1<=mx && y1<=my){
+            if (nodes[v].child[0]==-1) nodes[v].child[0]=newNode();
+            rangeAssign_rec(nodes[v].child[0],x1,mx,y1,my,ux1,uy1,ux2,uy2,val);
+        }
+        if (x1<=mx && my+1<=y2){
+            if (nodes[v].child[1]==-1) nodes[v].child[1]=newNode();
+            rangeAssign_rec(nodes[v].child[1],x1,mx,my+1,y2,ux1,uy1,ux2,uy2,val);
+        }
+        if (mx+1<=x2 && y1<=my){
+            if (nodes[v].child[2]==-1) nodes[v].child[2]=newNode();
+            rangeAssign_rec(nodes[v].child[2],mx+1,x2,y1,my,ux1,uy1,ux2,uy2,val);
+        }
+        if (mx+1<=x2 && my+1<=y2){
+            if (nodes[v].child[3]==-1) nodes[v].child[3]=newNode();
+            rangeAssign_rec(nodes[v].child[3],mx+1,x2,my+1,y2,ux1,uy1,ux2,uy2,val);
+        }
+        pull(v);
     }
 
-    // ---------------- Queries ----------------
-    ll queryGCDY(int idxX,int idxY,int ly,int ry,int y1,int y2){
-        if(y2<ly || ry<y1) return 0;
-        Node &node = tree[idxX][idxY];
-        if(y1<=ly && ry<=y2) return node.gcdVal;
-        pushY(idxX,idxY,ly,ry);
-        int mid = (ly + ry)/2;
-        return __gcd(queryGCDY(idxX,idxY*2,ly,mid,y1,y2),
-                     queryGCDY(idxX,idxY*2+1,mid+1,ry,y1,y2));
+    // ---------- QUERIES ----------
+    T queryGCD_rec(int v,int x1,int x2,int y1,int y2,int qx1,int qy1,int qx2,int qy2){
+        if (qx1>x2||qx2<x1||qy1>y2||qy2<y1) return 0;
+        if (qx1<=x1&&x2<=qx2&&qy1<=y1&&y2<=qy2) return nodes[v].gcdVal;
+        push(v,x1,x2,y1,y2);
+        int mx=(x1+x2)>>1,my=(y1+y2)>>1;
+        T res=0;
+        if (x1<=mx && y1<=my && nodes[v].child[0]!=-1) res=gcdT(res,queryGCD_rec(nodes[v].child[0],x1,mx,y1,my,qx1,qy1,qx2,qy2));
+        if (x1<=mx && my+1<=y2 && nodes[v].child[1]!=-1) res=gcdT(res,queryGCD_rec(nodes[v].child[1],x1,mx,my+1,y2,qx1,qy1,qx2,qy2));
+        if (mx+1<=x2 && y1<=my && nodes[v].child[2]!=-1) res=gcdT(res,queryGCD_rec(nodes[v].child[2],mx+1,x2,y1,my,qx1,qy1,qx2,qy2));
+        if (mx+1<=x2 && my+1<=y2 && nodes[v].child[3]!=-1) res=gcdT(res,queryGCD_rec(nodes[v].child[3],mx+1,x2,my+1,y2,qx1,qy1,qx2,qy2));
+        return res;
     }
 
-    ll queryGCDX(int idxX,int lx,int rx,int x1,int x2,int y1,int y2){
-        if(x2<lx || rx<x1) return 0;
-        if(x1<=lx && rx<=x2) return queryGCDY(idxX,1,0,m-1,y1,y2);
-        int mid = (lx+rx)/2;
-        return __gcd(queryGCDX(idxX*2,lx,mid,x1,x2,y1,y2),
-                     queryGCDX(idxX*2+1,mid+1,rx,x1,x2,y1,y2));
+    T queryLCM_rec(int v,int x1,int x2,int y1,int y2,int qx1,int qy1,int qx2,int qy2){
+        if (qx1>x2||qx2<x1||qy1>y2||qy2<y1) return 1;
+        if (qx1<=x1&&x2<=qx2&&qy1<=y1&&y2<=qy2) return nodes[v].lcmVal;
+        push(v,x1,x2,y1,y2);
+        int mx=(x1+x2)>>1,my=(y1+y2)>>1;
+        T L=1;
+        if (x1<=mx && y1<=my && nodes[v].child[0]!=-1) L=lcm_saturate(L,queryLCM_rec(nodes[v].child[0],x1,mx,y1,my,qx1,qy1,qx2,qy2));
+        if (x1<=mx && my+1<=y2 && nodes[v].child[1]!=-1) L=lcm_saturate(L,queryLCM_rec(nodes[v].child[1],x1,mx,my+1,y2,qx1,qy1,qx2,qy2));
+        if (mx+1<=x2 && y1<=my && nodes[v].child[2]!=-1) L=lcm_saturate(L,queryLCM_rec(nodes[v].child[2],mx+1,x2,y1,my,qx1,qy1,qx2,qy2));
+        if (mx+1<=x2 && my+1<=y2 && nodes[v].child[3]!=-1) L=lcm_saturate(L,queryLCM_rec(nodes[v].child[3],mx+1,x2,my+1,y2,qx1,qy1,qx2,qy2));
+        return L;
     }
 
-    ll queryLCMY(int idxX,int idxY,int ly,int ry,int y1,int y2){
-        if(y2<ly || ry<y1) return 1;
-        Node &node = tree[idxX][idxY];
-        if(y1<=ly && ry<=y2) return node.lcmVal;
-        pushY(idxX,idxY,ly,ry);
-        int mid = (ly + ry)/2;
-        ll L = queryLCMY(idxX,idxY*2,ly,mid,y1,y2);
-        ll R = queryLCMY(idxX,idxY*2+1,mid+1,ry,y1,y2);
-        if(L==1) return R;
-        if(R==1) return L;
-        return (L/__gcd(L,R))*R;
-    }
-
-    ll queryLCMX(int idxX,int lx,int rx,int x1,int x2,int y1,int y2){
-        if(x2<lx || rx<x1) return 1;
-        if(x1<=lx && rx<=x2) return queryLCMY(idxX,1,0,m-1,y1,y2);
-        int mid = (lx+rx)/2;
-        ll L = queryLCMX(idxX*2,lx,mid,x1,x2,y1,y2);
-        ll R = queryLCMX(idxX*2+1,mid+1,rx,x1,x2,y1,y2);
-        if(L==1) return R;
-        if(R==1) return L;
-        return (L/__gcd(L,R))*R;
-    }
-
-    ll queryProdModY(int idxX,int idxY,int ly,int ry,int y1,int y2,ll mod){
-        if(y2<ly || ry<y1) return 1;
-        Node &node = tree[idxX][idxY];
-        if(y1<=ly && ry<=y2) return node.prodVal % mod;
-        pushY(idxX,idxY,ly,ry);
-        int mid = (ly+ry)/2;
-        return (queryProdModY(idxX,idxY*2,ly,mid,y1,y2,mod) *
-                queryProdModY(idxX,idxY*2+1,mid+1,ry,y1,y2,mod)) % mod;
-    }
-
-    ll queryProdModX(int idxX,int lx,int rx,int x1,int x2,int y1,int y2,ll mod){
-        if(x2<lx || rx<x1) return 1;
-        if(x1<=lx && rx<=x2) return queryProdModY(idxX,1,0,m-1,y1,y2,mod);
-        int mid = (lx+rx)/2;
-        return (queryProdModX(idxX*2,lx,mid,x1,x2,y1,y2,mod) *
-                queryProdModX(idxX*2+1,mid+1,rx,x1,x2,y1,y2,mod)) % mod;
+    T queryProdMod_rec(int v,int x1,int x2,int y1,int y2,int qx1,int qy1,int qx2,int qy2){
+        if (qx1>x2||qx2<x1||qy1>y2||qy2<y1) return 1 % MOD;
+        if (qx1<=x1&&x2<=qx2&&qy1<=y1&&y2<=qy2) return nodes[v].prodMod;
+        push(v,x1,x2,y1,y2);
+        int mx=(x1+x2)>>1,my=(y1+y2)>>1;
+        __int128 P=1;
+        if (x1<=mx && y1<=my && nodes[v].child[0]!=-1) P=P*queryProdMod_rec(nodes[v].child[0],x1,mx,y1,my,qx1,qy1,qx2,qy2)%MOD;
+        if (x1<=mx && my+1<=y2 && nodes[v].child[1]!=-1) P=P*queryProdMod_rec(nodes[v].child[1],x1,mx,my+1,y2,qx1,qy1,qx2,qy2)%MOD;
+        if (mx+1<=x2 && y1<=my && nodes[v].child[2]!=-1) P=P*queryProdMod_rec(nodes[v].child[2],mx+1,x2,y1,my,qx1,qy1,qx2,qy2)%MOD;
+        if (mx+1<=x2 && my+1<=y2 && nodes[v].child[3]!=-1) P=P*queryProdMod_rec(nodes[v].child[3],mx+1,x2,my+1,y2,qx1,qy1,qx2,qy2)%MOD;
+        return (T)P;
     }
 
 public:
-    // ---------------- Constructors ----------------
-    SegTreeAdv2D(int n_, int m_): n(n_), m(m_) {
-        tree.assign(4*n, vector<Node>(4*m));
+    SegTreeAdv2D() = default;
+
+    SegTreeAdv2D(int N,int M,T fixedMod=(T)1000000007,T lcmCap=(T(1)<<62))
+        :n(N),m(M),MOD(fixedMod),LCM_CAP(lcmCap){
+        nodes.clear(); nodes.push_back(Node());
+        if (n&&m) applyAssign(0,0,n-1,0,m-1,0);
     }
 
-    SegTreeAdv2D(const vector<vector<ll>>& grid): n(grid.size()), m(grid[0].size()) {
-        tree.assign(4*n, vector<Node>(4*m));
-        buildX(1,0,n-1,grid);
+    SegTreeAdv2D(const vector<vector<T>>& a,T fixedMod=(T)1000000007,T lcmCap=(T(1)<<62))
+        :n((int)a.size()),m(n?(int)a[0].size():0),MOD(fixedMod),LCM_CAP(lcmCap){
+        nodes.clear(); nodes.push_back(Node());
+        if (n&&m) build_rec(0,0,n-1,0,m-1,a);
     }
 
-    // ---------------- Public API ----------------
-    void rangeAssign(int x1,int y1,int x2,int y2,ll val){
-        rangeAssignX(1,0,n-1,x1,x2,y1,y2,val);
+    void rangeAssign(int x1,int y1,int x2,int y2,T val){
+        if (!n||!m) return;
+        x1=max(0,x1); y1=max(0,y1);
+        x2=min(n-1,x2); y2=min(m-1,y2);
+        if (x1>x2||y1>y2) return;
+        rangeAssign_rec(0,0,n-1,0,m-1,x1,y1,x2,y2,val);
     }
 
-    void pointAssign(int x,int y,ll val){
-        rangeAssign(x,y,x,y,val);
+    void pointAssign(int x,int y,T val){ rangeAssign(x,y,x,y,val); }
+
+    T rangeGCD(int x1,int y1,int x2,int y2){
+        if (!n||!m) return 0;
+        x1=max(0,x1); y1=max(0,y1);
+        x2=min(n-1,x2); y2=min(m-1,y2);
+        if (x1>x2||y1>y2) return 0;
+        return queryGCD_rec(0,0,n-1,0,m-1,x1,y1,x2,y2);
     }
 
-    ll rangeGCD(int x1,int y1,int x2,int y2){
-        return queryGCDX(1,0,n-1,x1,x2,y1,y2);
+    T rangeLCM(int x1,int y1,int x2,int y2){
+        if (!n||!m) return 1;
+        x1=max(0,x1); y1=max(0,y1);
+        x2=min(n-1,x2); y2=min(m-1,y2);
+        if (x1>x2||y1>y2) return 1;
+        return queryLCM_rec(0,0,n-1,0,m-1,x1,y1,x2,y2);
     }
 
-    ll rangeLCM(int x1,int y1,int x2,int y2){
-        return queryLCMX(1,0,n-1,x1,x2,y1,y2);
+    T rangeProdMod(int x1,int y1,int x2,int y2){
+        if (!n||!m) return 1 % MOD;
+        x1=max(0,x1); y1=max(0,y1);
+        x2=min(n-1,x2); y2=min(m-1,y2);
+        if (x1>x2||y1>y2) return 1 % MOD;
+        return queryProdMod_rec(0,0,n-1,0,m-1,x1,y1,x2,y2);
     }
 
-    ll rangeProdMod(int x1,int y1,int x2,int y2,ll mod){
-        return queryProdModX(1,0,n-1,x1,x2,y1,y2,mod);
-    }
+    T pointQuery(int x,int y){ return rangeGCD(x,y,x,y); }
 
-    ll pointQuery(int x,int y){
-        return rangeGCD(x,y,x,y); // default GCD value at point
-    }
+    int nodeCount() const { return (int)nodes.size(); }
 };

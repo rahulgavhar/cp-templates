@@ -150,23 +150,54 @@ struct SuffixArray {
         return min(st[k][ri], st[k][rj - (1 << k)]);
     }
 
-    // Binary search for pattern range in SA
+    // Optimized binary search for pattern range in SA (O(m + log n))
     pair<int, int> range_in_SA(const string& pat) const {
         int m = pat.size();
         int lo = 0, hi = n;
-        // lower bound
+        int lcpL = 0, lcpR = 0;
+
+        // ---- lower bound ----
         while (lo < hi) {
             int mid = (lo + hi) / 2;
-            if (s.compare(sa[mid], m, pat) < 0) lo = mid + 1;
-            else hi = mid;
+            int idx = sa[mid];
+            int lcpMid = min(lcpL, lcpR); // we can skip this much
+
+            // Compare starting from lcpMid
+            while (lcpMid < m && idx + lcpMid < n &&
+                s[idx + lcpMid] == pat[lcpMid])
+                lcpMid++;
+
+            if (idx + lcpMid == n || (lcpMid < m && s[idx + lcpMid] < pat[lcpMid])) {
+                lo = mid + 1;
+                lcpL = lcpMid;  // update matched length on left side
+            } else {
+                hi = mid;
+                lcpR = lcpMid;  // update matched length on right side
+            }
         }
         int L = lo;
-        hi = n;
-        // upper bound
+
+        // reset bounds for upper bound
+        lo = 0; hi = n;
+        lcpL = lcpR = 0;
+
+        // ---- upper bound ----
         while (lo < hi) {
             int mid = (lo + hi) / 2;
-            if (s.compare(sa[mid], m, pat) <= 0) lo = mid + 1;
-            else hi = mid;
+            int idx = sa[mid];
+            int lcpMid = min(lcpL, lcpR);
+
+            while (lcpMid < m && idx + lcpMid < n &&
+                s[idx + lcpMid] == pat[lcpMid])
+                lcpMid++;
+
+            if (idx + lcpMid == n || (lcpMid < m && s[idx + lcpMid] <= pat[lcpMid])) {
+                lo = mid + 1;
+                lcpL = lcpMid;
+            } else {
+                hi = mid;
+                lcpR = lcpMid;
+            }
         }
         return {L, lo};
     }
