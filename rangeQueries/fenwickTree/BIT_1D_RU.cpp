@@ -1,127 +1,155 @@
-/*
-    Fenwick Tree (Binary Indexed Tree) - 1D with Range Updates (templated)
-    ----------------------------------------------------------------------
-    Supports:
-        - Range updates (add value to [l, r])
-        - Range sum queries
-        - Point updates (via range update with l = r)
-
-    Template parameter: T
-        - Can be int, long long, double, etc.
-
-    Time Complexity:
-        - rangeUpdate / pointUpdate : O(log n)
-        - prefixSum / rangeSum      : O(log n)
-
-    Implementation details:
-        - Uses two Fenwick trees (BIT1, BIT2) to handle range updates.
-*/
-
-#include <bits/stdc++.h>
+#include<bits/stdc++.h>
+#include<ext/pb_ds/assoc_container.hpp>
+#include<ext/pb_ds/tree_policy.hpp>
+using namespace __gnu_pbds;
 using namespace std;
 
-template <typename T>
-class BIT_1D_RU {
-private:
-    vector<T> BIT1; // First Fenwick tree
-    vector<T> BIT2; // Second Fenwick tree
-    int sz, offset;
 
-public:
-    // Build from array
-    BIT_1D_RU(const vector<T>& a, bool oneIndexed) {
-        int len = a.size();
-        offset = (oneIndexed ? 0 : 1);
-        sz = len + offset;
-        BIT1.assign(sz, T(0));
-        BIT2.assign(sz, T(0));
-        for (int i = 1 - offset; i < len; i++) {
-            pointUpdate(i + offset, a[i]);
+
+
+inline namespace MY{
+    /*
+        ===============================
+        BIT_1D_RU Class — Function Complexities
+        ===============================
+
+        1. sumRangeUpdate(l, r, val)  → Time: O(log n) | Space: O(1)
+        2. sumPrefixQuery(i)           → Time: O(log n) | Space: O(1)
+        3. sumRangeQuery(l, r)        → Time: O(log n) | Space: O(1)
+        4. sumPointUpdate(idx, val)   → Time: O(log n) | Space: O(1)
+        5. xorRangeUpdate(l, r, val)  → Time: O(r - l + 1) | Space: O(1)
+        6. xorPrefixQuery(i)           → Time: O(log n) | Space: O(1)
+        7. xorRangeQuery(l, r)        → Time: O(log n) | Space: O(1)
+        8. xorPointUpdate(idx, val)   → Time: O(1) | Space: O(1)
+        9. printBITs()                 → Time: O(n)    | Space: O(1)
+        10. printPrefixSums()          → Time: O(n log n) | Space: O(1)
+
+        Where:
+        n = size of the array / BIT
+    */
+
+
+    template <typename T> struct plusOp { T operator()(T a, T b) const { return a + b; } };
+    template <typename T> struct xorOp  { T operator()(T a, T b) const { return a ^ b; } };
+
+    template <typename T, typename Op>
+    class BIT_1D_RU {
+    private:
+        int n;
+        Op op;
+        bool isXOR;
+        vector<T> BIT1, BIT2;   // 2 BITs, used for sum or xor
+        int offset;             // 0 or 1-indexed support
+
+        // ---- INTERNAL HELPERS ----
+        void addBIT(vector<T>& BIT, int i, T val) {
+            for (; i <= n; i += i & -i) BIT[i] = op(BIT[i], val);
         }
-    }
 
-    // Empty tree
-    BIT_1D_RU(int len) : offset(1), sz(len + offset) {
-        BIT1.assign(sz, T(0));
-        BIT2.assign(sz, T(0));
-    }
-
-    // Internal: prefix sums from BIT1 and BIT2
-    T sumBIT1(int i) const {
-        T ans = T(0);
-        while (i > 0) {
-            ans += BIT1[i];
-            i &= (i - 1);
+        T queryBIT(const vector<T>& BIT, int i) const {
+            T res = 0;
+            for (; i > 0; i -= i & -i) res = op(res, BIT[i]);
+            return res;
         }
-        return ans;
-    }
 
-    T sumBIT2(int i) const {
-        T ans = T(0);
-        while (i > 0) {
-            ans += BIT2[i];
-            i &= (i - 1);
+        // For XOR range updates, handle parity logic
+        void xorPointUpdate(int idx, T val) {
+            // idx is 1-indexed internally
+            if (idx & 1) addBIT(BIT1, idx, val);  // odd positions
+            else addBIT(BIT2, idx, val);          // even positions
         }
-        return ans;
-    }
 
-    // Prefix sum up to i
-    T prefixSum(int i) const {
-        return sumBIT1(i) * i - sumBIT2(i);
-    }
-
-    // Range sum [l, r]
-    T rangeSum(int l, int r) const {
-        return prefixSum(r) - prefixSum(l - 1);
-    }
-
-    // Internal: add to BIT1 and BIT2
-    void addBIT1(int i, T val) {
-        while (i < sz) {
-            BIT1[i] += val;
-            i += (i & -i);
+        T xorPrefixQueryHelper(int idx) const {
+            T res = 0;
+            // Sum XORs from odd positions
+            res ^= queryBIT(BIT1, idx);
+            // Sum XORs from even positions
+            res ^= queryBIT(BIT2, idx);
+            return res;
         }
-    }
 
-    void addBIT2(int i, T val) {
-        while (i < sz) {
-            BIT2[i] += val;
-            i += (i & -i);
+    public:
+        // Constructor: size + optional 0/1-indexed
+        BIT_1D_RU(int size, bool oneIndexed = false) : n(size) {
+            isXOR = std::is_same<Op, xorOp<T>>::value;
+            offset = oneIndexed ? 0 : 1;
+            BIT1.assign(n + 2, 0); // +2 to avoid off-by-one issues
+            BIT2.assign(n + 2, 0);
         }
-    }
 
-    // Range update: add val to [l, r]
-    void rangeUpdate(int l, int r, T val) {
-        addBIT1(l, val);
-        addBIT1(r + 1, -val);
-        addBIT2(l, val * (l - 1));
-        addBIT2(r + 1, -val * r);
-    }
-
-    // Point update: set index i to new value
-    void pointUpdate(int i, T val) {
-        rangeUpdate(i, i, val);
-    }
-
-    // Debugging helpers
-    void printPrefixSums() const {
-        for (int i = 1; i < sz; i++) {
-            cout << prefixSum(i) << " ";
+        // ---------------- SUM FUNCTIONS ----------------
+        void sumRangeUpdate(int l, int r, T val) {
+            if (!isXOR) {
+                l += offset; r += offset;
+                addBIT(BIT1, l, val);
+                addBIT(BIT1, r + 1, -val);
+                addBIT(BIT2, l, val * (l - 1));
+                addBIT(BIT2, r + 1, -val * r);
+            }
         }
-        cout << "\n";
-    }
 
-    void printBIT1() const {
-        for (int i = 1; i < sz; i++) {
-            cout << BIT1[i] << " ";
+        T sumPrefixQuery(int i) const {
+            if (!isXOR) {
+                i += offset;
+                return queryBIT(BIT1, i) * i - queryBIT(BIT2, i);
+            }
+            return 0;
         }
-        cout << "\n";
-    }
 
-    void printBIT2() const {
-        for (int i = 1; i < sz; i++) {
-            cout << BIT2[i] << " ";
+        T sumRangeQuery(int l, int r) const {
+            if (!isXOR) {
+                T res_r = sumPrefixQuery(r);
+                T res_l_minus_1 = (l > 0) ? sumPrefixQuery(l - 1) : 0;
+                return res_r - res_l_minus_1;
+            }
+            return 0;
         }
-        cout << "\n";
-    }
-};
+
+        void sumPointUpdate(int idx, T val) { sumRangeUpdate(idx, idx, val); }
+
+        // ---------------- XOR FUNCTIONS ----------------
+        void xorRangeUpdate(int l, int r, T val) {
+            if (isXOR) {
+                l += offset; r += offset;
+                for (int i = l; i <= r; ++i) {
+                    xorPointUpdate(i, val);
+                }
+            }
+        }
+
+        T xorPrefixQuery(int i) const {
+            if (isXOR) {
+                i += offset;
+                return xorPrefixQueryHelper(i);
+            }
+            return 0;
+        }
+
+        T xorRangeQuery(int l, int r) const {
+            if (isXOR) {
+                T res_r = xorPrefixQuery(r);
+                T res_l_minus_1 = (l > 0) ? xorPrefixQuery(l - 1) : 0;
+                return res_r ^ res_l_minus_1;
+            }
+            return 0;
+        }
+
+        void xorPointUpdateSingle(int idx, T val) { xorRangeUpdate(idx, idx, val); }
+
+        // ---------------- DEBUGGING ----------------
+        void printBITs() const { 
+            for (int i = 1; i <= n; i++) cout << BIT1[i] << " "; 
+            cout << "\n";
+            for (int i = 1; i <= n; i++) cout << BIT2[i] << " "; 
+            cout << "\n"; 
+        }
+
+        void printPrefixSums() const {
+            for (int i = 0; i < n; i++) {
+                if (isXOR) cout << xorPrefixQuery(i) << " ";
+                else cout << sumPrefixQuery(i) << " ";
+            }
+            cout << "\n";
+        }
+    };
+}

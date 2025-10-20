@@ -1,65 +1,81 @@
-#include <bits/stdc++.h>
+#include<bits/stdc++.h>
+#include<ext/pb_ds/assoc_container.hpp>
+#include<ext/pb_ds/tree_policy.hpp>
+using namespace __gnu_pbds;
 using namespace std;
 
-// Rabin-Karp Implementation with DoubleHashing
-// supports double-hashing and reduces probablity of spurious hits drastically to 10e-18 (so works for daily life strings / testcases on coding platforms)
 
-class RABINKARP
-{
-    static const int RK_RADIX_1 = 31, RK_RADIX_2 = 53, RK_MOD_1 = int(1e9 + 7), RK_MOD_2 = int(1e9 + 9);
 
-public:
-    static pair<int, int> hashPair(string str)
-    {
-        int m = str.length();
-        long long hash1 = 0, hash2 = 0, factor1 = 1, factor2 = 1;
 
-        for (int i = m - 1; i >= 0; i--)
-        {
-            hash1 = (hash1 + ((unsigned char)(str[i]) * factor1) % RK_MOD_1) % RK_MOD_1;
-            factor1 = (factor1 * RK_RADIX_1) % RK_MOD_1;
+inline namespace MY{
 
-            hash2 = (hash2 + ((unsigned char)(str[i]) * factor2) % RK_MOD_2) % RK_MOD_2;
-            factor2 = (factor2 * RK_RADIX_2) % RK_MOD_2;
-        }
-        return make_pair(hash1 % RK_MOD_1, hash2 % RK_MOD_2);
-    }
 
-    static vector<int> rkocc(string &text, string &pat)
-    {
-        int n = text.length(), m = pat.length(), pow_m = m;
-        if (n < m || m == 0)
-            return {};
+    /*
+        ===============================
+        RABINKARP Class — Function Complexities
+        ===============================
 
-        vector<int> occ;
+        1. hashPair(str)                     → Compute double hash of a string | Time: O(m) | Space: O(1)
+        2. rkocc(text, pat)                  → Find all occurrences of pattern in text using Rabin-Karp | Time: O(n + m) amortized | Space: O(m + total_matches)
 
-        long long MAX_WEIGHT_1 = 1, MAX_WEIGHT_2 = 1, MW_FAC_1 = RK_RADIX_1, MW_FAC_2 = RK_RADIX_2;
-        while (pow_m > 0)
-        {
-            if (pow_m & 1)
-            {
-                MAX_WEIGHT_1 = (MAX_WEIGHT_1 * MW_FAC_1) % RK_MOD_1;
-                MAX_WEIGHT_2 = (MAX_WEIGHT_2 * MW_FAC_2) % RK_MOD_2;
+        Where:
+        n = length of text
+        m = length of pattern
+        total_matches = total number of occurrences found
+
+        Notes:
+        - Uses double hashing to reduce collisions (two different bases and mods)
+        - Uses __int128 for safe multiplication in rolling hash
+        - Rolling hash updates in O(1) per character after initial computation
+        - Returns starting indices (0-based) of all occurrences of pattern in text
+    */
+
+
+
+    class RABINKARP {
+        static const int RK_RADIX_1 = 31, RK_RADIX_2 = 53;
+        static const int RK_MOD_1 = 1e9 + 7, RK_MOD_2 = 1e9 + 9;
+
+    public:
+        static pair<int, int> hashPair(const string &str) {
+            long long h1 = 0, h2 = 0;
+            for (char c : str) {
+                h1 = ( (__int128)h1 * RK_RADIX_1 + (unsigned char)c ) % RK_MOD_1;
+                h2 = ( (__int128)h2 * RK_RADIX_2 + (unsigned char)c ) % RK_MOD_2;
             }
-            pow_m >>= 1;
-            MW_FAC_1 = (MW_FAC_1 * MW_FAC_1) % RK_MOD_1;
-            MW_FAC_2 = (MW_FAC_2 * MW_FAC_2) % RK_MOD_2;
+            return {h1, h2};
         }
 
-        pair<int, int> patHash = hashPair(pat);
-        pair<int, int> textHash = hashPair(text.substr(0, m));
+        static vector<int> rkocc(const string &text, const string &pat) {
+            int n = text.size(), m = pat.size();
+            if (n < m || m == 0) return {};
 
-        for (int i = 0; i <= n - m; i++)
-        {
-            if (i > 0)
-            {
-                textHash.first = (((1LL * textHash.first * RK_RADIX_1) % RK_MOD_1 - (1LL * (unsigned char)text[i - 1] * MAX_WEIGHT_1) % RK_MOD_1 + RK_MOD_1) % RK_MOD_1 + (unsigned char)text[i + m - 1]) % RK_MOD_1;
-                textHash.second = (((1LL * textHash.second * RK_RADIX_2) % RK_MOD_2 - (1LL * (unsigned char)text[i - 1] * MAX_WEIGHT_2) % RK_MOD_2 + RK_MOD_2) % RK_MOD_2 + (unsigned char)text[i + m - 1]) % RK_MOD_2;
+            vector<int> occ;
+            auto patHash = hashPair(pat);
+            auto txtHash = hashPair(text.substr(0, m));
+
+            long long pow1 = 1, pow2 = 1;
+            for (int i = 1; i < m; i++) {
+                pow1 = ( (__int128)pow1 * RK_RADIX_1 ) % RK_MOD_1;
+                pow2 = ( (__int128)pow2 * RK_RADIX_2 ) % RK_MOD_2;
             }
-            if (textHash == patHash)
-                occ.push_back(i);
-        }
 
-        return occ;
-    }
-};
+            if (txtHash == patHash) occ.push_back(0);
+
+            for (int i = 1; i <= n - m; i++) {
+                // Remove left character
+                txtHash.first = (txtHash.first - (__int128)(unsigned char)text[i - 1] * pow1) % RK_MOD_1;
+                txtHash.second = (txtHash.second - (__int128)(unsigned char)text[i - 1] * pow2) % RK_MOD_2;
+                if (txtHash.first < 0) txtHash.first += RK_MOD_1;
+                if (txtHash.second < 0) txtHash.second += RK_MOD_2;
+
+                // Add right character
+                txtHash.first = (( (__int128)txtHash.first * RK_RADIX_1 ) + (unsigned char)text[i + m - 1]) % RK_MOD_1;
+                txtHash.second = (( (__int128)txtHash.second * RK_RADIX_2 ) + (unsigned char)text[i + m - 1]) % RK_MOD_2;
+
+                if (txtHash == patHash) occ.push_back(i);
+            }
+            return occ;
+        }
+    };
+}
