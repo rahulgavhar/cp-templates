@@ -1,6 +1,6 @@
-#include<bits/stdc++.h>
-#include<ext/pb_ds/assoc_container.hpp>
-#include<ext/pb_ds/tree_policy.hpp>
+#include <bits/stdc++.h>
+#include <ext/pb_ds/assoc_container.hpp>
+#include <ext/pb_ds/tree_policy.hpp>
 using namespace __gnu_pbds;
 using namespace std;
 
@@ -8,7 +8,7 @@ using namespace std;
 
 
 inline namespace MY{
-    
+
     /*
         ===============================
         ZAlgo Class — Function Complexities
@@ -32,53 +32,67 @@ inline namespace MY{
         Usage Example:
             string text = "ababcababc";
             string pat = "ab";
-            vector<int> occ = ZAlgo::zocc(text, pat);
+            vector<int> occ = zAlgo::zocc(text, pat);
     */
 
-
-    class zAlgo {
+    class zAlgo{
     public:
         // Access characters as if pattern + "$" + text is concatenated
-        static char charAt(const string &pattern, const string &text, int idx) {
+        static char charAt(const string &pattern, const string &text, int idx){
             int m = pattern.size();
-            if (idx < m) return pattern[idx];
-            if (idx == m) return '$';
+            if (idx < m)
+                return pattern[idx];
+            if (idx == m)
+                return '$';
             return text[idx - m - 1];
         }
 
-        static vector<int> zocc(const string &text, const string &pattern) {
+        static vector<int> zocc(const string &text, const string &pattern){
             int m = pattern.size(), n = text.size();
             vector<int> occurrences;
-            if (m == 0 || n < m) return occurrences;
+            if (m == 0 || n < m)
+                return occurrences;
 
-            vector<int> Z(m, 0);  // Z-array for pattern only
-
-            // Compute Z-values for pattern prefix
+            // ---------- Step 1: Build Z array for pattern ----------
+            vector<int> Z(m, 0);
             int L = 0, R = 0;
-            for (int i = 1; i < m; i++) {
-                if (i > R) Z[i] = 0;
-                else Z[i] = min(R - i, Z[i - L]);
-                
-                while (i + Z[i] < m && charAt(pattern, text, Z[i]) == charAt(pattern, text, i + Z[i]))
+            for (int i = 1; i < m; i++){
+                if (i <= R)
+                    Z[i] = min(R - i + 1, Z[i - L]);
+                    
+                while (i + Z[i] < m && pattern[Z[i]] == pattern[i + Z[i]])
                     Z[i]++;
-                
-                if (i + Z[i] - 1 > R) {
+
+                if (i + Z[i] - 1 > R){
                     L = i;
                     R = i + Z[i] - 1;
                 }
             }
 
-            // Scan text using pattern Z-values
+            // ---------- Step 2: Optimized pattern matching using Z-values ----------
             L = R = -1;
-            for (int idx = 0; idx <= n - m; idx++) {
-                int matchLen = 0;
-                while (matchLen < m && pattern[matchLen] == text[idx + matchLen])
-                    matchLen++;
-                if (matchLen == m)
-                    occurrences.push_back(idx);
+            for (int i = 0; i < n; i++){
+                int k = 0;
+                if (i <= R)
+                    k = min(R - i + 1, Z[i - L]);
+
+                // expand match
+                while (k < m && i + k < n && pattern[k] == text[i + k])
+                    k++;
+
+                // update window
+                if (i + k - 1 > R){
+                    L = i;
+                    R = i + k - 1;
+                }
+
+                // if full pattern matched
+                if (k == m)
+                    occurrences.push_back(i);
             }
 
             return occurrences;
         }
     };
+
 }
